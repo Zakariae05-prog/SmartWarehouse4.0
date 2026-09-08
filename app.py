@@ -2,862 +2,621 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datetime import date
+from pathlib import Path
 
 # ============================================================
 # CONFIGURATION
 # ============================================================
-
 st.set_page_config(
-    page_title="Lean Production Monitoring",
-    page_icon="🏭",
-    layout="wide"
+    page_title="HDEP - Control DMAIC",
+    page_icon="📊",
+    layout="wide",
 )
 
-# ============================================================
-# STYLE
-# ============================================================
+DATA_FILE = Path("hdep_control_data.csv")
+ACTIONS_FILE = Path("hdep_actions.csv")
 
-st.markdown("""
-<style>
-    .main-title {
-        font-size: 32px;
-        font-weight: bold;
-        margin-bottom: 20px;
-    }
+TAKT_TIME = 48.0
+ASSEMBLY_BASELINE = 56.05
+ASSEMBLY_S3 = 50.20
+PUSHBACK_BASELINE = 52.11
+PUSHBACK_TARGET = 35.81
+SMED_BASELINE = 6.33
+SMED_TARGET = 3.31
+MOVEMENT_BASELINE = 837.51
+PRODUCTION_TARGET_H = 75
 
-    .kpi-card {
-        padding: 20px;
-        border-radius: 12px;
-        background-color: #f5f5f5;
-        text-align: center;
-        margin-bottom: 10px;
-    }
+POSTS = [
+    "Twist 1",
+    "Twist 2",
+    "Splice 1",
+    "Splice 2",
+    "Assemblage écrous",
+    "Insertion & Push-Back",
+    "Assemblage P7",
+    "Assemblage P8",
+    "Assemblage P9",
+    "Assemblage P10",
+    "Assemblage P11",
+    "Assemblage P12",
+    "TEST EOL",
+    "Contrôle / Packaging",
+]
 
-    .kpi-value {
-        font-size: 28px;
-        font-weight: bold;
-    }
-
-    .kpi-label {
-        font-size: 15px;
-        color: #666;
-    }
-
-    .alert-box {
-        padding: 15px;
-        border-radius: 10px;
-        background-color: #ffe6e6;
-        border-left: 5px solid #ff0000;
-    }
-
-    .success-box {
-        padding: 15px;
-        border-radius: 10px;
-        background-color: #e6ffe6;
-        border-left: 5px solid #00aa00;
-    }
-</style>
-""", unsafe_allow_html=True)
-
+CAUSES = [
+    "Attente matière",
+    "Réglage / changement de série",
+    "Problème machine",
+    "Méthode de travail",
+    "Formation opérateur",
+    "Déplacement / transport",
+    "Qualité / scrap",
+    "Outil Push-Back",
+    "Autre",
+]
 
 # ============================================================
-# SESSION STATE
+# DATA
 # ============================================================
+def load_data():
+    if DATA_FILE.exists():
+        df = pd.read_csv(DATA_FILE)
+        if "Date" in df.columns:
+            df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+        return df
+    return pd.DataFrame(columns=[
+        "Date", "Production totale", "Production OK", "Production NOK",
+        "Takt Time (s)", "CT Assemblage (s)", "CT Push-Back (s)",
+        "SMED Komax (min)", "Temps attente (min)",
+        "Distance Milk-Run (m/h)", "Cause principale", "Commentaire"
+    ])
 
-if "production_data" not in st.session_state:
+def save_data(df):
+    df.to_csv(DATA_FILE, index=False)
 
-    st.session_state.production_data = pd.DataFrame(
-        columns=[
-            "Date",
-            "Reference",
-            "Production",
-            "Production_OK",
-            "Production_NOK",
-            "Temps_planifie",
-            "Temps_arret",
-            "Cycle_Time",
-            "Takt_Time",
-            "Temps_changement",
-            "Deplacement",
-            "Cause"
-        ]
-    )
+def load_actions():
+    if ACTIONS_FILE.exists():
+        return pd.read_csv(ACTIONS_FILE)
+    return pd.DataFrame(columns=[
+        "Date", "Problème", "Cause", "Action corrective",
+        "Responsable", "Échéance", "Statut", "Efficacité"
+    ])
 
-if "smed_data" not in st.session_state:
+def save_actions(df):
+    df.to_csv(ACTIONS_FILE, index=False)
 
-    st.session_state.smed_data = pd.DataFrame(
-        columns=[
-            "Date",
-            "Reference",
-            "Temps_avant",
-            "Temps_apres"
-        ]
-    )
-
+df = load_data()
+actions = load_actions()
 
 # ============================================================
-# CALCULS KPI
+# HELPERS
 # ============================================================
+def status_lower_is_better(value, target, orange_margin=0.10):
+    if pd.isna(value):
+        return "⚪"
+    if value <= target:
+        return "🟢"
+    if value <= target * (1 + orange_margin):
+        return "🟠"
+    return "🔴"
 
-def calcul_kpi(df):
+def status_higher_is_better(value, target, orange_margin=0.10):
+    if pd.isna(value):
+        return "⚪"
+    if value >= target:
+        return "🟢"
+    if value >= target * (1 - orange_margin):
+        return "🟠"
+    return "🔴"
 
-    if len(df) == 0:
-        return {
-            "production": 0,
-            "qualite": 0,
-            "disponibilite": 0,
-            "performance": 0,
-            "trs": 0,
-            "productivite": 0,
-            "cycle": 0,
-            "takt": 0,
-            "arret": 0,
-            "deplacement": 0
-        }
+def quality_rate(row):
+    total = row["Production totale"]
+    return (row["Production OK"] / total * 100) if total else 0
 
-    production = df["Production"].sum()
-    production_ok = df["Production_OK"].sum()
-
-    temps_planifie = df["Temps_planifie"].sum()
-    temps_arret = df["Temps_arret"].sum()
-
-    # Qualité
-    if production > 0:
-        qualite = production_ok / production * 100
-    else:
-        qualite = 0
-
-    # Disponibilité
-    if temps_planifie > 0:
-        disponibilite = (
-            (temps_planifie - temps_arret)
-            / temps_planifie
-            * 100
-        )
-    else:
-        disponibilite = 0
-
-    # Performance basée sur cycle/takt
-    cycle = df["Cycle_Time"].mean()
-    takt = df["Takt_Time"].mean()
-
-    if cycle > 0:
-        performance = min(takt / cycle * 100, 100)
-    else:
-        performance = 0
-
-    trs = (
-        disponibilite
-        * performance
-        * qualite
-        / 10000
-    )
-
-    # Productivité
-    if temps_planifie > 0:
-        productivite = (
-            production_ok
-            / (temps_planifie / 60)
-        )
-    else:
-        productivite = 0
-
-    return {
-        "production": production,
-        "qualite": qualite,
-        "disponibilite": disponibilite,
-        "performance": performance,
-        "trs": trs,
-        "productivite": productivite,
-        "cycle": cycle,
-        "takt": takt,
-        "arret": temps_arret,
-        "deplacement": df["Deplacement"].sum()
-    }
-
+def global_status(last):
+    checks = [
+        last["CT Assemblage (s)"] <= TAKT_TIME,
+        last["CT Push-Back (s)"] <= TAKT_TIME,
+        last["SMED Komax (min)"] <= SMED_TARGET,
+        last["Temps attente (min)"] <= 10,
+        last["Production totale"] >= PRODUCTION_TARGET_H,
+    ]
+    if all(checks):
+        return "🟢 STABLE"
+    if sum(checks) >= 3:
+        return "🟠 À SURVEILLER"
+    return "🔴 ACTION REQUISE"
 
 # ============================================================
 # SIDEBAR
 # ============================================================
-
-st.sidebar.title("🏭 Lean Production")
-
+st.sidebar.title("HDEP – DMAIC Control")
+st.sidebar.caption("TE Connectivity | Ligne HDEP | Volvo")
 page = st.sidebar.radio(
     "Navigation",
     [
-        "🏠 Dashboard",
-        "📥 Saisie des données",
-        "🚨 Analyse des pertes",
-        "🔧 SMED",
-        "📈 Avant / Après"
-    ]
+        "📊 Dashboard Control",
+        "📝 Saisie quotidienne",
+        "📈 Suivi des KPI",
+        "🚨 Alertes",
+        "🔧 Plan d'actions",
+        "🔄 Avant / Après",
+        "📥 Données & export",
+    ],
 )
 
-st.sidebar.markdown("---")
-
+st.sidebar.divider()
 st.sidebar.info(
-    "Application de pilotage de la performance "
-    "d'une ligne de production."
+    "Objectif de la phase Control : surveiller les performances "
+    "et vérifier la pérennisation des améliorations."
 )
 
-
 # ============================================================
-# PAGE 1 : DASHBOARD
+# 1. DASHBOARD
 # ============================================================
-
-if page == "🏠 Dashboard":
-
+if page == "📊 Dashboard Control":
+    st.title("📊 Dashboard de Contrôle – Ligne HDEP")
     st.markdown(
-        '<div class="main-title">🏭 Lean Production Monitoring</div>',
-        unsafe_allow_html=True
+        "### Pérennisation des améliorations – Phase **Control** de DMAIC"
     )
 
-    df = st.session_state.production_data
+    if df.empty:
+        st.warning("Aucune donnée quotidienne n'est encore saisie.")
+        st.info("Commencez par la page « Saisie quotidienne ».")
+        st.stop()
 
-    kpi = calcul_kpi(df)
+    last = df.sort_values("Date").iloc[-1]
 
-    if len(df) == 0:
+    st.subheader("Situation du dernier relevé")
+    c1, c2, c3, c4, c5 = st.columns(5)
 
-        st.warning(
-            "⚠️ Aucune donnée disponible. "
-            "Commencez par la page 'Saisie des données'."
-        )
+    c1.metric(
+        "Production",
+        f'{last["Production totale"]:.0f}',
+        f"cible {PRODUCTION_TARGET_H}/h",
+    )
+    c2.metric(
+        "CT Assemblage",
+        f'{last["CT Assemblage (s)"]:.2f} s',
+        f"{last['CT Assemblage (s)'] - TAKT_TIME:+.2f} s vs Takt",
+    )
+    c3.metric(
+        "CT Push-Back",
+        f'{last["CT Push-Back (s)"]:.2f} s',
+        f"{last['CT Push-Back (s)'] - TAKT_TIME:+.2f} s vs Takt",
+    )
+    c4.metric(
+        "SMED Komax",
+        f'{last["SMED Komax (min)"]:.2f} min',
+        f"cible {SMED_TARGET:.2f} min",
+    )
+    c5.metric(
+        "Qualité",
+        f"{quality_rate(last):.1f} %",
+        f'{last["Production NOK"]:.0f} NOK',
+    )
 
-    else:
+    st.divider()
 
-        # ---------------- KPI ----------------
+    # Status cards
+    st.subheader("Feu de contrôle")
+    s1, s2, s3, s4, s5 = st.columns(5)
 
-        c1, c2, c3, c4 = st.columns(4)
+    s1.metric("Assemblage", status_lower_is_better(last["CT Assemblage (s)"], TAKT_TIME))
+    s2.metric("Push-Back", status_lower_is_better(last["CT Push-Back (s)"], TAKT_TIME))
+    s3.metric("SMED", status_lower_is_better(last["SMED Komax (min)"], SMED_TARGET))
+    s4.metric("Attente", status_lower_is_better(last["Temps attente (min)"], 10))
+    s5.metric("Production", status_higher_is_better(last["Production totale"], PRODUCTION_TARGET_H))
 
-        with c1:
-            st.metric(
-                "TRS / OEE",
-                f"{kpi['trs']:.1f}%"
-            )
+    st.markdown(f"### Statut global : **{global_status(last)}**")
 
-        with c2:
-            st.metric(
-                "Productivité",
-                f"{kpi['productivite']:.1f} pièces/h"
-            )
+    st.subheader("Évolution des postes critiques")
+    chart_df = df.sort_values("Date").copy()
 
-        with c3:
-            st.metric(
-                "Cycle Time",
-                f"{kpi['cycle']:.1f} s"
-            )
+    fig = px.line(
+        chart_df,
+        x="Date",
+        y=["CT Assemblage (s)", "CT Push-Back (s)"],
+        markers=True,
+        title="Cycle Time des postes critiques",
+    )
+    fig.add_hline(y=TAKT_TIME, line_dash="dash", annotation_text="Takt = 48 s")
+    st.plotly_chart(fig, use_container_width=True)
 
-        with c4:
-            st.metric(
-                "Takt Time",
-                f"{kpi['takt']:.1f} s"
-            )
-
-        st.markdown("---")
-
-        c1, c2, c3, c4 = st.columns(4)
-
-        with c1:
-            st.metric(
-                "Production",
-                f"{kpi['production']:.0f}"
-            )
-
-        with c2:
-            st.metric(
-                "Qualité",
-                f"{kpi['qualite']:.1f}%"
-            )
-
-        with c3:
-            st.metric(
-                "Temps d'arrêt",
-                f"{kpi['arret']:.1f} min"
-            )
-
-        with c4:
-            st.metric(
-                "Déplacements",
-                f"{kpi['deplacement']:.1f} min"
-            )
-
-        # ---------------- ALERTES ----------------
-
-        st.subheader("🚨 État de la ligne")
-
-        if kpi["cycle"] > kpi["takt"]:
-
-            st.error(
-                f"🔴 ALERTE : Cycle Time "
-                f"({kpi['cycle']:.1f}s) > "
-                f"Takt Time ({kpi['takt']:.1f}s)"
-            )
-
-        else:
-
-            st.success(
-                f"🟢 Cycle Time ({kpi['cycle']:.1f}s) "
-                f"≤ Takt Time ({kpi['takt']:.1f}s)"
-            )
-
-        # ---------------- GRAPHIQUES ----------------
-
-        st.subheader("📊 Évolution de la production")
-
-        daily = (
-            df.groupby("Date")["Production"]
-            .sum()
-            .reset_index()
-        )
-
-        fig = px.bar(
-            daily,
-            x="Date",
-            y="Production",
-            title="Production par jour"
-        )
-
-        st.plotly_chart(
-            fig,
-            use_container_width=True
-        )
-
-        # ---------------- DONNEES ----------------
-
-        st.subheader("📋 Données")
-
-        st.dataframe(
-            df,
-            use_container_width=True
-        )
-
-
-# ============================================================
-# PAGE 2 : SAISIE
-# ============================================================
-
-elif page == "📥 Saisie des données":
-
-    st.title("📥 Saisie des données de production")
-
-    with st.form("production_form"):
-
-        c1, c2, c3 = st.columns(3)
-
-        with c1:
-
-            d = st.date_input(
-                "Date",
-                value=date.today()
-            )
-
-            reference = st.text_input(
-                "Référence produit"
-            )
-
-            production = st.number_input(
-                "Production totale",
-                min_value=0,
-                step=1
-            )
-
-        with c2:
-
-            production_ok = st.number_input(
-                "Production OK",
-                min_value=0,
-                step=1
-            )
-
-            production_nok = st.number_input(
-                "Production NOK",
-                min_value=0,
-                step=1
-            )
-
-            temps_planifie = st.number_input(
-                "Temps planifié (min)",
-                min_value=0.0,
-                step=1.0
-            )
-
-        with c3:
-
-            temps_arret = st.number_input(
-                "Temps d'arrêt (min)",
-                min_value=0.0,
-                step=1.0
-            )
-
-            cycle_time = st.number_input(
-                "Cycle Time (s)",
-                min_value=0.0,
-                step=0.1
-            )
-
-            takt_time = st.number_input(
-                "Takt Time (s)",
-                min_value=0.0,
-                step=0.1
-            )
-
-        c1, c2, c3 = st.columns(3)
-
-        with c1:
-
-            temps_changement = st.number_input(
-                "Temps changement série (min)",
-                min_value=0.0,
-                step=1.0
-            )
-
-        with c2:
-
-            deplacement = st.number_input(
-                "Temps déplacement (min)",
-                min_value=0.0,
-                step=1.0
-            )
-
-        with c3:
-
-            cause = st.selectbox(
-                "Cause principale",
-                [
-                    "Aucune",
-                    "Attente matière",
-                    "Panne machine",
-                    "Réglage",
-                    "Déplacement",
-                    "Défaut qualité",
-                    "Manque opérateur",
-                    "Autre"
-                ]
-            )
-
-        submitted = st.form_submit_button(
-            "➕ Ajouter les données"
-        )
-
-    if submitted:
-
-        new_data = pd.DataFrame(
-            [{
-                "Date": d,
-                "Reference": reference,
-                "Production": production,
-                "Production_OK": production_ok,
-                "Production_NOK": production_nok,
-                "Temps_planifie": temps_planifie,
-                "Temps_arret": temps_arret,
-                "Cycle_Time": cycle_time,
-                "Takt_Time": takt_time,
-                "Temps_changement": temps_changement,
-                "Deplacement": deplacement,
-                "Cause": cause
-            }]
-        )
-
-        st.session_state.production_data = pd.concat(
-            [
-                st.session_state.production_data,
-                new_data
-            ],
-            ignore_index=True
-        )
-
-        st.success("✅ Données ajoutées avec succès !")
-
-    st.subheader("📋 Historique")
-
+    st.subheader("Dernières mesures")
+    display_cols = [
+        "Date", "Production totale", "Production OK", "Production NOK",
+        "CT Assemblage (s)", "CT Push-Back (s)",
+        "SMED Komax (min)", "Temps attente (min)",
+        "Distance Milk-Run (m/h)", "Cause principale"
+    ]
     st.dataframe(
-        st.session_state.production_data,
-        use_container_width=True
+        df.sort_values("Date", ascending=False)[display_cols].head(10),
+        use_container_width=True,
+        hide_index=True,
     )
 
-
 # ============================================================
-# PAGE 3 : ANALYSE DES PERTES
+# 2. DAILY ENTRY
 # ============================================================
+elif page == "📝 Saisie quotidienne":
+    st.title("📝 Saisie quotidienne")
+    st.caption("Un relevé par jour pour assurer le contrôle de la ligne.")
 
-elif page == "🚨 Analyse des pertes":
+    with st.form("daily_form"):
+        d = st.date_input("Date du relevé", value=date.today())
 
-    st.title("🚨 Analyse des pertes de production")
+        st.subheader("Production & qualité")
+        a, b, c = st.columns(3)
+        production = a.number_input("Production totale", min_value=0, step=1)
+        ok = b.number_input("Production OK", min_value=0, step=1)
+        nok = c.number_input("Production NOK", min_value=0, step=1)
 
-    df = st.session_state.production_data
-
-    if len(df) == 0:
-
-        st.warning("Aucune donnée disponible.")
-
-    else:
-
-        # ---------------- PARETO ----------------
-
-        losses = (
-            df.groupby("Cause")["Temps_arret"]
-            .sum()
-            .reset_index()
-            .sort_values(
-                "Temps_arret",
-                ascending=False
-            )
-        )
-
-        st.subheader("📊 Pareto des causes d'arrêt")
-
-        fig = px.bar(
-            losses,
-            x="Cause",
-            y="Temps_arret",
-            title="Temps perdu par cause"
-        )
-
-        st.plotly_chart(
-            fig,
-            use_container_width=True
-        )
-
-        # ---------------- TOP CAUSE ----------------
-
-        if len(losses) > 0:
-
-            top_cause = losses.iloc[0]["Cause"]
-            top_time = losses.iloc[0]["Temps_arret"]
-
-            st.error(
-                f"🔴 Cause principale : {top_cause} "
-                f"→ {top_time:.1f} minutes perdues"
-            )
-
-            # ---------------- RECOMMANDATION ----------------
-
-            recommendations = {
-
-                "Attente matière":
-                    "Rapprocher le stock du poste et mettre en place un système de réapprovisionnement.",
-
-                "Panne machine":
-                    "Renforcer la maintenance préventive et analyser les causes de panne.",
-
-                "Réglage":
-                    "Appliquer la démarche SMED pour réduire le temps de changement.",
-
-                "Déplacement":
-                    "Revoir l'implantation du poste et appliquer les principes 5S.",
-
-                "Défaut qualité":
-                    "Analyser les causes avec Ishikawa et mettre en place un contrôle au poste.",
-
-                "Manque opérateur":
-                    "Rééquilibrer les postes et vérifier la charge de travail.",
-
-                "Autre":
-                    "Effectuer une analyse détaillée de la cause."
-            }
-
-            recommendation = recommendations.get(
-                top_cause,
-                "Analyser la cause."
-            )
-
-            st.info(
-                f"💡 **Action recommandée :** {recommendation}"
-            )
-
-        # ---------------- DONNEES ----------------
-
-        st.subheader("📋 Détail des pertes")
-
-        st.dataframe(
-            losses,
-            use_container_width=True
-        )
-
-
-# ============================================================
-# PAGE 4 : SMED
-# ============================================================
-
-elif page == "🔧 SMED":
-
-    st.title("🔧 Analyse SMED")
-
-    st.write(
-        "Comparez le temps de changement de série "
-        "avant et après amélioration."
-    )
-
-    with st.form("smed_form"):
-
-        d = st.date_input(
-            "Date",
-            value=date.today()
-        )
-
-        reference = st.text_input(
-            "Référence"
-        )
-
-        avant = st.number_input(
-            "Temps avant SMED (min)",
+        st.subheader("Cycle Time")
+        a, b = st.columns(2)
+        ct_assembly = a.number_input(
+            "CT Assemblage (s)",
             min_value=0.0,
-            step=1.0
+            value=float(ASSEMBLY_S3),
+            step=0.1,
         )
-
-        apres = st.number_input(
-            "Temps après SMED (min)",
+        ct_pushback = b.number_input(
+            "CT Insertion & Push-Back (s)",
             min_value=0.0,
-            step=1.0
+            value=float(PUSHBACK_TARGET),
+            step=0.1,
         )
 
-        submitted = st.form_submit_button(
-            "Ajouter"
+        st.subheader("Autres KPI")
+        a, b, c = st.columns(3)
+        smed = a.number_input(
+            "SMED Komax Alpha 550T (min)",
+            min_value=0.0,
+            value=float(SMED_TARGET),
+            step=0.01,
         )
+        waiting = b.number_input(
+            "Temps d'attente (min)",
+            min_value=0.0,
+            step=0.1,
+        )
+        milk_run = c.number_input(
+            "Distance Milk-Run (m/h)",
+            min_value=0.0,
+            step=1.0,
+            help="À renseigner après mise en œuvre du Milk-Run.",
+        )
+
+        cause = st.selectbox("Cause principale", CAUSES)
+        comment = st.text_area("Commentaire / observation")
+
+        submitted = st.form_submit_button("💾 Enregistrer le relevé")
 
     if submitted:
+        if ok + nok > production:
+            st.error("Production OK + NOK ne peut pas dépasser la production totale.")
+        else:
+            new_row = pd.DataFrame([{
+                "Date": pd.Timestamp(d),
+                "Production totale": production,
+                "Production OK": ok,
+                "Production NOK": nok,
+                "Takt Time (s)": TAKT_TIME,
+                "CT Assemblage (s)": ct_assembly,
+                "CT Push-Back (s)": ct_pushback,
+                "SMED Komax (min)": smed,
+                "Temps attente (min)": waiting,
+                "Distance Milk-Run (m/h)": milk_run,
+                "Cause principale": cause,
+                "Commentaire": comment,
+            }])
 
-        new_smed = pd.DataFrame(
-            [{
-                "Date": d,
-                "Reference": reference,
-                "Temps_avant": avant,
-                "Temps_apres": apres
-            }]
+            df = pd.concat([df, new_row], ignore_index=True)
+            save_data(df)
+
+            st.success("Relevé enregistré avec succès.")
+
+            alerts = []
+            if ct_assembly > TAKT_TIME:
+                alerts.append("CT Assemblage supérieur au Takt.")
+            if ct_pushback > TAKT_TIME:
+                alerts.append("CT Push-Back supérieur au Takt.")
+            if smed > SMED_TARGET:
+                alerts.append("SMED supérieur à la cible.")
+            if waiting > 10:
+                alerts.append("Temps d'attente élevé.")
+            if production < PRODUCTION_TARGET_H:
+                alerts.append("Production inférieure à l'objectif.")
+
+            if alerts:
+                st.warning("⚠️ Écarts détectés : " + " | ".join(alerts))
+            else:
+                st.success("🟢 Tous les contrôles principaux sont conformes.")
+
+# ============================================================
+# 3. KPI FOLLOW-UP
+# ============================================================
+elif page == "📈 Suivi des KPI":
+    st.title("📈 Suivi des KPI")
+    if df.empty:
+        st.info("Aucune donnée disponible.")
+        st.stop()
+
+    dff = df.sort_values("Date")
+
+    kpi = st.selectbox(
+        "Choisir le KPI",
+        [
+            "CT Assemblage (s)",
+            "CT Push-Back (s)",
+            "SMED Komax (min)",
+            "Temps attente (min)",
+            "Distance Milk-Run (m/h)",
+            "Production totale",
+        ],
+    )
+
+    targets = {
+        "CT Assemblage (s)": TAKT_TIME,
+        "CT Push-Back (s)": TAKT_TIME,
+        "SMED Komax (min)": SMED_TARGET,
+        "Temps attente (min)": 10,
+        "Distance Milk-Run (m/h)": 400,
+        "Production totale": PRODUCTION_TARGET_H,
+    }
+
+    fig = px.line(
+        dff,
+        x="Date",
+        y=kpi,
+        markers=True,
+        title=f"Évolution : {kpi}",
+    )
+
+    if kpi in ["Production totale"]:
+        fig.add_hline(
+            y=targets[kpi],
+            line_dash="dash",
+            annotation_text=f"Cible = {targets[kpi]}",
+        )
+    else:
+        fig.add_hline(
+            y=targets[kpi],
+            line_dash="dash",
+            annotation_text=f"Seuil = {targets[kpi]}",
         )
 
-        st.session_state.smed_data = pd.concat(
+    st.plotly_chart(fig, use_container_width=True)
+
+    latest = dff.iloc[-1][kpi]
+    target = targets[kpi]
+
+    if kpi == "Production totale":
+        status = status_higher_is_better(latest, target)
+    else:
+        status = status_lower_is_better(latest, target)
+
+    a, b, c = st.columns(3)
+    a.metric("Dernière valeur", f"{latest:.2f}")
+    b.metric("Cible / seuil", f"{target:.2f}")
+    c.metric("Statut", status)
+
+# ============================================================
+# 4. ALERTS
+# ============================================================
+elif page == "🚨 Alertes":
+    st.title("🚨 Alertes de contrôle")
+
+    if df.empty:
+        st.info("Aucune donnée à analyser.")
+        st.stop()
+
+    alerts = []
+
+    for _, row in df.sort_values("Date", ascending=False).iterrows():
+        if row["CT Assemblage (s)"] > TAKT_TIME:
+            alerts.append([
+                row["Date"].date(),
+                "Cycle Time",
+                "Assemblage",
+                row["CT Assemblage (s)"],
+                TAKT_TIME,
+                "🔴 Dépassement du Takt",
+            ])
+
+        if row["CT Push-Back (s)"] > TAKT_TIME:
+            alerts.append([
+                row["Date"].date(),
+                "Cycle Time",
+                "Insertion & Push-Back",
+                row["CT Push-Back (s)"],
+                TAKT_TIME,
+                "🔴 Dépassement du Takt",
+            ])
+
+        if row["SMED Komax (min)"] > SMED_TARGET:
+            alerts.append([
+                row["Date"].date(),
+                "SMED",
+                "Komax Alpha 550T",
+                row["SMED Komax (min)"],
+                SMED_TARGET,
+                "🟠 Cible SMED non atteinte",
+            ])
+
+        if row["Temps attente (min)"] > 10:
+            alerts.append([
+                row["Date"].date(),
+                "Attente",
+                "Ligne HDEP",
+                row["Temps attente (min)"],
+                10,
+                "🟠 Temps d'attente élevé",
+            ])
+
+        if row["Production totale"] < PRODUCTION_TARGET_H:
+            alerts.append([
+                row["Date"].date(),
+                "Production",
+                "Ligne HDEP",
+                row["Production totale"],
+                PRODUCTION_TARGET_H,
+                "🟠 Production sous objectif",
+            ])
+
+    if alerts:
+        alert_df = pd.DataFrame(
+            alerts,
+            columns=["Date", "KPI", "Poste", "Valeur", "Seuil", "Alerte"],
+        )
+        st.dataframe(alert_df, use_container_width=True, hide_index=True)
+        st.warning(f"{len(alerts)} écart(s) détecté(s).")
+    else:
+        st.success("🟢 Aucun écart détecté.")
+
+# ============================================================
+# 5. ACTION PLAN
+# ============================================================
+elif page == "🔧 Plan d'actions":
+    st.title("🔧 Plan d'actions correctives")
+    st.caption("Logique : écart → cause → action → responsable → vérification.")
+
+    with st.form("action_form"):
+        d = st.date_input("Date", value=date.today())
+        problem = st.selectbox(
+            "Problème",
             [
-                st.session_state.smed_data,
-                new_smed
+                "CT Assemblage > Takt",
+                "CT Push-Back > Takt",
+                "SMED Komax non atteint",
+                "Temps d'attente élevé",
+                "Production sous objectif",
+                "Qualité / Scrap",
+                "Déplacement / Milk-Run",
+                "Autre",
             ],
-            ignore_index=True
         )
+        cause = st.selectbox("Cause", CAUSES)
+        action = st.text_area("Action corrective")
+        responsible = st.text_input("Responsable")
+        deadline = st.date_input("Échéance", value=date.today())
+        status = st.selectbox("Statut", ["À faire", "En cours", "Réalisée", "Vérifiée"])
+        efficiency = st.selectbox("Efficacité", ["Non évaluée", "Efficace", "Non efficace"])
 
-        st.success("Données SMED ajoutées.")
+        submit = st.form_submit_button("Ajouter l'action")
 
-    smed = st.session_state.smed_data
+    if submit:
+        new_action = pd.DataFrame([{
+            "Date": pd.Timestamp(d),
+            "Problème": problem,
+            "Cause": cause,
+            "Action corrective": action,
+            "Responsable": responsible,
+            "Échéance": pd.Timestamp(deadline),
+            "Statut": status,
+            "Efficacité": efficiency,
+        }])
+        actions = pd.concat([actions, new_action], ignore_index=True)
+        save_actions(actions)
+        st.success("Action ajoutée.")
 
-    if len(smed) > 0:
-
-        smed["Gain_%"] = (
-            (
-                smed["Temps_avant"]
-                - smed["Temps_apres"]
-            )
-            / smed["Temps_avant"]
-            * 100
-        )
-
-        gain_moyen = smed["Gain_%"].mean()
-
-        st.metric(
-            "Gain moyen SMED",
-            f"{gain_moyen:.1f}%"
-        )
-
-        fig = px.bar(
-            smed,
-            x="Reference",
-            y=["Temps_avant", "Temps_apres"],
-            barmode="group",
-            title="Avant / Après SMED"
-        )
-
-        st.plotly_chart(
-            fig,
-            use_container_width=True
-        )
-
-        st.dataframe(
-            smed,
-            use_container_width=True
-        )
-
+    st.subheader("Actions enregistrées")
+    if actions.empty:
+        st.info("Aucune action enregistrée.")
+    else:
+        st.dataframe(actions.sort_values("Date", ascending=False),
+                     use_container_width=True, hide_index=True)
 
 # ============================================================
-# PAGE 5 : AVANT / APRES
+# 6. BEFORE / AFTER
 # ============================================================
-
-elif page == "📈 Avant / Après":
-
-    st.title("📈 Comparaison avant / après amélioration")
-
-    st.subheader("Entrer les performances")
-
-    c1, c2 = st.columns(2)
-
-    with c1:
-
-        st.markdown("### 🔴 Avant amélioration")
-
-        trs_avant = st.number_input(
-            "TRS avant (%)",
-            min_value=0.0,
-            max_value=100.0,
-            value=75.0
-        )
-
-        prod_avant = st.number_input(
-            "Productivité avant (pièces/h)",
-            min_value=0.0,
-            value=80.0
-        )
-
-        cycle_avant = st.number_input(
-            "Cycle Time avant (s)",
-            min_value=0.0,
-            value=52.0
-        )
-
-        arret_avant = st.number_input(
-            "Temps d'arrêt avant (min)",
-            min_value=0.0,
-            value=60.0
-        )
-
-    with c2:
-
-        st.markdown("### 🟢 Après amélioration")
-
-        trs_apres = st.number_input(
-            "TRS après (%)",
-            min_value=0.0,
-            max_value=100.0,
-            value=87.0
-        )
-
-        prod_apres = st.number_input(
-            "Productivité après (pièces/h)",
-            min_value=0.0,
-            value=95.0
-        )
-
-        cycle_apres = st.number_input(
-            "Cycle Time après (s)",
-            min_value=0.0,
-            value=45.0
-        )
-
-        arret_apres = st.number_input(
-            "Temps d'arrêt après (min)",
-            min_value=0.0,
-            value=35.0
-        )
-
-    # ---------------- GAINS ----------------
-
-    st.markdown("---")
-
-    def gain_positif(avant, apres):
-
-        if avant == 0:
-            return 0
-
-        return (apres - avant) / avant * 100
-
-    gain_trs = gain_positif(
-        trs_avant,
-        trs_apres
-    )
-
-    gain_prod = gain_positif(
-        prod_avant,
-        prod_apres
-    )
-
-    gain_cycle = (
-        (cycle_avant - cycle_apres)
-        / cycle_avant
-        * 100
-        if cycle_avant > 0 else 0
-    )
-
-    gain_arret = (
-        (arret_avant - arret_apres)
-        / arret_avant
-        * 100
-        if arret_avant > 0 else 0
-    )
-
-    st.subheader("📊 Résultats")
-
-    c1, c2, c3, c4 = st.columns(4)
-
-    with c1:
-        st.metric(
-            "Gain TRS",
-            f"{gain_trs:.1f}%"
-        )
-
-    with c2:
-        st.metric(
-            "Gain productivité",
-            f"{gain_prod:.1f}%"
-        )
-
-    with c3:
-        st.metric(
-            "Réduction Cycle Time",
-            f"{gain_cycle:.1f}%"
-        )
-
-    with c4:
-        st.metric(
-            "Réduction arrêts",
-            f"{gain_arret:.1f}%"
-        )
-
-    # ---------------- GRAPHIQUE ----------------
+elif page == "🔄 Avant / Après":
+    st.title("🔄 Avant / Après – Gains du projet")
 
     comparison = pd.DataFrame({
-
         "KPI": [
-            "TRS",
-            "Productivité",
-            "Cycle Time",
-            "Temps d'arrêt"
+            "CT Assemblage",
+            "CT Insertion & Push-Back",
+            "SMED Komax",
+            "Déplacements opérateurs",
         ],
-
         "Avant": [
-            trs_avant,
-            prod_avant,
-            cycle_avant,
-            arret_avant
+            ASSEMBLY_BASELINE,
+            PUSHBACK_BASELINE,
+            SMED_BASELINE,
+            MOVEMENT_BASELINE,
         ],
-
-        "Après": [
-            trs_apres,
-            prod_apres,
-            cycle_apres,
-            arret_apres
-        ]
+        "Après / cible": [
+            ASSEMBLY_S3,
+            PUSHBACK_TARGET,
+            SMED_TARGET,
+            0,
+        ],
+        "Unité": ["s", "s", "min", "s/h"],
     })
+
+    comparison["Gain"] = comparison["Avant"] - comparison["Après / cible"]
+    comparison["Gain %"] = (
+        comparison["Gain"] / comparison["Avant"] * 100
+    )
+
+    st.dataframe(comparison, use_container_width=True, hide_index=True)
 
     fig = px.bar(
         comparison,
         x="KPI",
-        y=["Avant", "Après"],
+        y=["Avant", "Après / cible"],
         barmode="group",
-        title="Performance avant / après"
+        title="Comparaison Avant / Après ou cible",
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.info(
+        "Remarque : les valeurs « Après / cible » correspondent aux résultats "
+        "ou cibles documentés dans le projet. Le déploiement physique final "
+        "des solutions reste à réaliser par l'équipe Process."
     )
 
-    st.plotly_chart(
-        fig,
-        use_container_width=True
-    )
-
-    st.success(
-        "🎯 L'objectif est de vérifier que les actions "
-        "Lean produisent une amélioration mesurable."
-    )
-
+    st.subheader("Gains documentés dans le projet")
+    st.markdown("""
+    - **Assemblage :** 56,05 s → 50,20 s à S+3.
+    - **Insertion & Push-Back :** 52,11 s → 35,81 s estimés avec l'outil multi-têtes.
+    - **SMED Komax :** 6,33 min → 3,31 min.
+    - **Déplacements :** 837,51 s/h de déplacements opérateurs identifiés,
+      avec suppression visée grâce au nouveau layout et au Milk-Run.
+    """)
 
 # ============================================================
-# FOOTER
+# 7. DATA & EXPORT
 # ============================================================
+elif page == "📥 Données & export":
+    st.title("📥 Données & export")
 
-st.sidebar.markdown("---")
-st.sidebar.caption(
-    "Lean Production Monitoring System | PFA"
-)
+    st.subheader("Données quotidiennes")
+    if df.empty:
+        st.info("Aucune donnée.")
+    else:
+        st.dataframe(df.sort_values("Date", ascending=False),
+                     use_container_width=True, hide_index=True)
+
+        csv = df.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            "⬇️ Télécharger les données KPI (CSV)",
+            csv,
+            "HDEP_KPI_Control.csv",
+            "text/csv",
+        )
+
+    st.divider()
+    st.subheader("Plan d'actions")
+    if not actions.empty:
+        csv_actions = actions.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            "⬇️ Télécharger le plan d'actions (CSV)",
+            csv_actions,
+            "HDEP_Plan_Actions.csv",
+            "text/csv",
+        )
+
+st.sidebar.divider()
+st.sidebar.caption("Application de suivi – Phase Control DMAIC")
