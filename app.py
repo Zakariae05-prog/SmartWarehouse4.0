@@ -1,268 +1,863 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
-import math
-import random
-import matplotlib.pyplot as plt
-from sklearn.cluster import KMeans
+import plotly.express as px
+from datetime import date
 
-# =====================================================
-# CONFIG
-# =====================================================
-st.set_page_config(page_title="Smart Warehouse AI 4.0", layout="wide")
+# ============================================================
+# CONFIGURATION
+# ============================================================
 
-st.title("🏭 Smart Warehouse AI 4.0")
-st.markdown("### Intelligent Logistics System (Industry 4.0 + AI)")
+st.set_page_config(
+    page_title="Lean Production Monitoring",
+    page_icon="🏭",
+    layout="wide"
+)
 
-# =====================================================
-# DATA INIT
-# =====================================================
-if "data" not in st.session_state:
+# ============================================================
+# STYLE
+# ============================================================
 
-    st.session_state.data = pd.DataFrame({
-        "Product": ["A", "B", "C", "D", "E"],
-        "X": [3, 5, 2, 8, 6],
-        "Y": [1, 2, 6, 3, 7],
-        "Stock": [20, 15, 30, 12, 18],
-        "Weight": [5, 25, 8, 40, 12],
-        "Defect_rate": [0.1, 0.05, 0.2, 0.08, 0.12]
-    })
+st.markdown("""
+<style>
+    .main-title {
+        font-size: 32px;
+        font-weight: bold;
+        margin-bottom: 20px;
+    }
 
-if "history" not in st.session_state:
-    st.session_state.history = []
+    .kpi-card {
+        padding: 20px;
+        border-radius: 12px;
+        background-color: #f5f5f5;
+        text-align: center;
+        margin-bottom: 10px;
+    }
 
-if "order_path" not in st.session_state:
-    st.session_state.order_path = []
+    .kpi-value {
+        font-size: 28px;
+        font-weight: bold;
+    }
 
-if "time_saved" not in st.session_state:
-    st.session_state.time_saved = 0
+    .kpi-label {
+        font-size: 15px;
+        color: #666;
+    }
 
-if "distance_saved" not in st.session_state:
-    st.session_state.distance_saved = 0
+    .alert-box {
+        padding: 15px;
+        border-radius: 10px;
+        background-color: #ffe6e6;
+        border-left: 5px solid #ff0000;
+    }
 
-data = st.session_state.data
+    .success-box {
+        padding: 15px;
+        border-radius: 10px;
+        background-color: #e6ffe6;
+        border-left: 5px solid #00aa00;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-# =====================================================
-# CLEAN DATA
-# =====================================================
-def clean_data(df):
-    df = df.dropna()
-    df = df[df["Stock"] >= 0]
-    return df
 
-data = clean_data(data)
+# ============================================================
+# SESSION STATE
+# ============================================================
 
-# =====================================================
-# DISTANCE
-# =====================================================
-def distance(a, b):
-    return math.sqrt((a[0]-b[0])**2 + (a[1]-b[1])**2)
+if "production_data" not in st.session_state:
 
-# =====================================================
-# HEAVY PRODUCT PENALTY
-# =====================================================
-def heavy_penalty(row):
-    if row["Weight"] > 30:
-        return 3
-    elif row["Weight"] > 15:
-        return 1.5
-    return 1
+    st.session_state.production_data = pd.DataFrame(
+        columns=[
+            "Date",
+            "Reference",
+            "Production",
+            "Production_OK",
+            "Production_NOK",
+            "Temps_planifie",
+            "Temps_arret",
+            "Cycle_Time",
+            "Takt_Time",
+            "Temps_changement",
+            "Deplacement",
+            "Cause"
+        ]
+    )
 
-# =====================================================
-# TOTAL DISTANCE
-# =====================================================
-def total_distance(path, df):
+if "smed_data" not in st.session_state:
 
-    current = (0, 0)
-    total = 0
+    st.session_state.smed_data = pd.DataFrame(
+        columns=[
+            "Date",
+            "Reference",
+            "Temps_avant",
+            "Temps_apres"
+        ]
+    )
 
-    for p in path:
 
-        row = df[df["Product"] == p].iloc[0]
-        pos = (row["X"], row["Y"])
+# ============================================================
+# CALCULS KPI
+# ============================================================
 
-        total += distance(current, pos)
-        current = pos
+def calcul_kpi(df):
 
-    return total
+    if len(df) == 0:
+        return {
+            "production": 0,
+            "qualite": 0,
+            "disponibilite": 0,
+            "performance": 0,
+            "trs": 0,
+            "productivite": 0,
+            "cycle": 0,
+            "takt": 0,
+            "arret": 0,
+            "deplacement": 0
+        }
 
-# =====================================================
-# AI PICKING (SMART ROUTE)
-# =====================================================
-def optimize_path(order, df):
+    production = df["Production"].sum()
+    production_ok = df["Production_OK"].sum()
 
-    current = (0, 0)
-    remaining = order.copy()
-    path = []
+    temps_planifie = df["Temps_planifie"].sum()
+    temps_arret = df["Temps_arret"].sum()
 
-    while remaining:
+    # Qualité
+    if production > 0:
+        qualite = production_ok / production * 100
+    else:
+        qualite = 0
 
-        best = None
-        min_d = float("inf")
+    # Disponibilité
+    if temps_planifie > 0:
+        disponibilite = (
+            (temps_planifie - temps_arret)
+            / temps_planifie
+            * 100
+        )
+    else:
+        disponibilite = 0
 
-        for p in remaining:
+    # Performance basée sur cycle/takt
+    cycle = df["Cycle_Time"].mean()
+    takt = df["Takt_Time"].mean()
 
-            row = df[df["Product"] == p].iloc[0]
-            pos = (row["X"], row["Y"])
+    if cycle > 0:
+        performance = min(takt / cycle * 100, 100)
+    else:
+        performance = 0
 
-            d = distance(current, pos) * heavy_penalty(row)
+    trs = (
+        disponibilite
+        * performance
+        * qualite
+        / 10000
+    )
 
-            if d < min_d:
-                min_d = d
-                best = p
+    # Productivité
+    if temps_planifie > 0:
+        productivite = (
+            production_ok
+            / (temps_planifie / 60)
+        )
+    else:
+        productivite = 0
 
-        path.append(best)
+    return {
+        "production": production,
+        "qualite": qualite,
+        "disponibilite": disponibilite,
+        "performance": performance,
+        "trs": trs,
+        "productivite": productivite,
+        "cycle": cycle,
+        "takt": takt,
+        "arret": temps_arret,
+        "deplacement": df["Deplacement"].sum()
+    }
 
-        current = (
-            df[df["Product"] == best]["X"].values[0],
-            df[df["Product"] == best]["Y"].values[0]
+
+# ============================================================
+# SIDEBAR
+# ============================================================
+
+st.sidebar.title("🏭 Lean Production")
+
+page = st.sidebar.radio(
+    "Navigation",
+    [
+        "🏠 Dashboard",
+        "📥 Saisie des données",
+        "🚨 Analyse des pertes",
+        "🔧 SMED",
+        "📈 Avant / Après"
+    ]
+)
+
+st.sidebar.markdown("---")
+
+st.sidebar.info(
+    "Application de pilotage de la performance "
+    "d'une ligne de production."
+)
+
+
+# ============================================================
+# PAGE 1 : DASHBOARD
+# ============================================================
+
+if page == "🏠 Dashboard":
+
+    st.markdown(
+        '<div class="main-title">🏭 Lean Production Monitoring</div>',
+        unsafe_allow_html=True
+    )
+
+    df = st.session_state.production_data
+
+    kpi = calcul_kpi(df)
+
+    if len(df) == 0:
+
+        st.warning(
+            "⚠️ Aucune donnée disponible. "
+            "Commencez par la page 'Saisie des données'."
         )
 
-        remaining.remove(best)
-
-    return path
-
-# =====================================================
-# CLUSTER SCALABILITY (ZONES)
-# =====================================================
-def cluster_layout(df):
-
-    kmeans = KMeans(n_clusters=2, n_init=10)
-
-    df["Zone"] = kmeans.fit_predict(df[["X", "Y"]])
-
-    return df
-
-data = cluster_layout(data)
-
-# =====================================================
-# KPI
-# =====================================================
-st.subheader("📊 KPI Dashboard (Before vs After AI)")
-
-before_time = 120
-before_distance = 60
-
-after_time = max(before_time - st.session_state.time_saved, 0)
-after_distance = max(before_distance - st.session_state.distance_saved, 0)
-
-gain = ((before_time - after_time) / before_time) * 100
-
-col1, col2, col3, col4 = st.columns(4)
-
-col1.metric("⏱ Before AI", f"{before_time} sec")
-col2.metric("🤖 After AI", f"{after_time:.1f} sec", delta=f"-{gain:.1f}%")
-col3.metric("📏 Distance Saved", f"{st.session_state.distance_saved:.1f}")
-col4.metric("📈 Efficiency", f"{gain:.1f}%")
-
-# =====================================================
-# ORDER
-# =====================================================
-order = st.multiselect("🛒 Select Products", data["Product"].tolist())
-
-if st.button("🚀 Run AI Optimization"):
-
-    if order:
-
-        path = optimize_path(order, data)
-
-        normal = total_distance(order, data)
-        optimized = total_distance(path, data)
-
-        st.session_state.distance_saved = normal - optimized
-        st.session_state.time_saved = (normal - optimized) * 2
-        st.session_state.order_path = path
-
-        st.success("AI Optimization Completed")
-
-        st.write("### Optimized Path")
-        st.write(" → ".join(path))
-
-# =====================================================
-# SCAN SYSTEM
-# =====================================================
-st.subheader("📡 IoT Scan Simulation")
-
-scan = st.selectbox("Scan Product", data["Product"])
-
-if st.button("Scan"):
-
-    st.session_state.history.append(scan)
-
-    row = data[data["Product"] == scan].iloc[0]
-
-    if random.random() < row["Defect_rate"]:
-        st.error("❌ Defective Product Detected")
     else:
-        st.success("✅ Product OK")
 
-# =====================================================
-# DEMAND ANALYSIS
-# =====================================================
-st.subheader("📊 Demand Analysis")
+        # ---------------- KPI ----------------
 
-if st.session_state.history:
+        c1, c2, c3, c4 = st.columns(4)
 
-    demand = pd.Series(st.session_state.history).value_counts()
+        with c1:
+            st.metric(
+                "TRS / OEE",
+                f"{kpi['trs']:.1f}%"
+            )
 
-    st.bar_chart(demand)
+        with c2:
+            st.metric(
+                "Productivité",
+                f"{kpi['productivite']:.1f} pièces/h"
+            )
 
-# =====================================================
-# UNEXPECTED EVENTS
-# =====================================================
-st.subheader("⚠ System Events")
+        with c3:
+            st.metric(
+                "Cycle Time",
+                f"{kpi['cycle']:.1f} s"
+            )
 
-events = ["none", "robot_blocked", "stock_out", "congestion"]
-event = random.choice(events)
+        with c4:
+            st.metric(
+                "Takt Time",
+                f"{kpi['takt']:.1f} s"
+            )
 
-st.write("Event:", event)
+        st.markdown("---")
 
-if event == "robot_blocked":
-    st.warning("Robot blocked → rerouting AI")
-elif event == "stock_out":
-    st.error("Stock shortage detected")
-elif event == "congestion":
-    st.warning("Warehouse congestion")
-else:
-    st.success("Normal operation")
+        c1, c2, c3, c4 = st.columns(4)
 
-# =====================================================
-# WAREHOUSE VISUALIZATION
-# =====================================================
-st.subheader("🗺 Warehouse Layout")
+        with c1:
+            st.metric(
+                "Production",
+                f"{kpi['production']:.0f}"
+            )
 
-fig, ax = plt.subplots()
+        with c2:
+            st.metric(
+                "Qualité",
+                f"{kpi['qualite']:.1f}%"
+            )
 
-for _, row in data.iterrows():
+        with c3:
+            st.metric(
+                "Temps d'arrêt",
+                f"{kpi['arret']:.1f} min"
+            )
 
-    ax.scatter(row["X"], row["Y"], s=300)
-    ax.text(row["X"], row["Y"], row["Product"], ha="center")
+        with c4:
+            st.metric(
+                "Déplacements",
+                f"{kpi['deplacement']:.1f} min"
+            )
 
-if st.session_state.order_path:
+        # ---------------- ALERTES ----------------
 
-    x = [0]
-    y = [0]
+        st.subheader("🚨 État de la ligne")
 
-    for p in st.session_state.order_path:
+        if kpi["cycle"] > kpi["takt"]:
 
-        r = data[data["Product"] == p].iloc[0]
+            st.error(
+                f"🔴 ALERTE : Cycle Time "
+                f"({kpi['cycle']:.1f}s) > "
+                f"Takt Time ({kpi['takt']:.1f}s)"
+            )
 
-        x.append(r["X"])
-        y.append(r["Y"])
+        else:
 
-    ax.plot(x, y)
+            st.success(
+                f"🟢 Cycle Time ({kpi['cycle']:.1f}s) "
+                f"≤ Takt Time ({kpi['takt']:.1f}s)"
+            )
 
-ax.set_title("AI Warehouse Map")
+        # ---------------- GRAPHIQUES ----------------
 
-st.pyplot(fig)
+        st.subheader("📊 Évolution de la production")
 
-# =====================================================
-# RESILIENCE SCORE
-# =====================================================
-st.subheader("🧠 AI Resilience Score")
+        daily = (
+            df.groupby("Date")["Production"]
+            .sum()
+            .reset_index()
+        )
 
-score = random.randint(85, 99)
+        fig = px.bar(
+            daily,
+            x="Date",
+            y="Production",
+            title="Production par jour"
+        )
 
-st.progress(score / 100)
+        st.plotly_chart(
+            fig,
+            use_container_width=True
+        )
 
-st.write(f"System Stability: {score}%")
+        # ---------------- DONNEES ----------------
+
+        st.subheader("📋 Données")
+
+        st.dataframe(
+            df,
+            use_container_width=True
+        )
+
+
+# ============================================================
+# PAGE 2 : SAISIE
+# ============================================================
+
+elif page == "📥 Saisie des données":
+
+    st.title("📥 Saisie des données de production")
+
+    with st.form("production_form"):
+
+        c1, c2, c3 = st.columns(3)
+
+        with c1:
+
+            d = st.date_input(
+                "Date",
+                value=date.today()
+            )
+
+            reference = st.text_input(
+                "Référence produit"
+            )
+
+            production = st.number_input(
+                "Production totale",
+                min_value=0,
+                step=1
+            )
+
+        with c2:
+
+            production_ok = st.number_input(
+                "Production OK",
+                min_value=0,
+                step=1
+            )
+
+            production_nok = st.number_input(
+                "Production NOK",
+                min_value=0,
+                step=1
+            )
+
+            temps_planifie = st.number_input(
+                "Temps planifié (min)",
+                min_value=0.0,
+                step=1.0
+            )
+
+        with c3:
+
+            temps_arret = st.number_input(
+                "Temps d'arrêt (min)",
+                min_value=0.0,
+                step=1.0
+            )
+
+            cycle_time = st.number_input(
+                "Cycle Time (s)",
+                min_value=0.0,
+                step=0.1
+            )
+
+            takt_time = st.number_input(
+                "Takt Time (s)",
+                min_value=0.0,
+                step=0.1
+            )
+
+        c1, c2, c3 = st.columns(3)
+
+        with c1:
+
+            temps_changement = st.number_input(
+                "Temps changement série (min)",
+                min_value=0.0,
+                step=1.0
+            )
+
+        with c2:
+
+            deplacement = st.number_input(
+                "Temps déplacement (min)",
+                min_value=0.0,
+                step=1.0
+            )
+
+        with c3:
+
+            cause = st.selectbox(
+                "Cause principale",
+                [
+                    "Aucune",
+                    "Attente matière",
+                    "Panne machine",
+                    "Réglage",
+                    "Déplacement",
+                    "Défaut qualité",
+                    "Manque opérateur",
+                    "Autre"
+                ]
+            )
+
+        submitted = st.form_submit_button(
+            "➕ Ajouter les données"
+        )
+
+    if submitted:
+
+        new_data = pd.DataFrame(
+            [{
+                "Date": d,
+                "Reference": reference,
+                "Production": production,
+                "Production_OK": production_ok,
+                "Production_NOK": production_nok,
+                "Temps_planifie": temps_planifie,
+                "Temps_arret": temps_arret,
+                "Cycle_Time": cycle_time,
+                "Takt_Time": takt_time,
+                "Temps_changement": temps_changement,
+                "Deplacement": deplacement,
+                "Cause": cause
+            }]
+        )
+
+        st.session_state.production_data = pd.concat(
+            [
+                st.session_state.production_data,
+                new_data
+            ],
+            ignore_index=True
+        )
+
+        st.success("✅ Données ajoutées avec succès !")
+
+    st.subheader("📋 Historique")
+
+    st.dataframe(
+        st.session_state.production_data,
+        use_container_width=True
+    )
+
+
+# ============================================================
+# PAGE 3 : ANALYSE DES PERTES
+# ============================================================
+
+elif page == "🚨 Analyse des pertes":
+
+    st.title("🚨 Analyse des pertes de production")
+
+    df = st.session_state.production_data
+
+    if len(df) == 0:
+
+        st.warning("Aucune donnée disponible.")
+
+    else:
+
+        # ---------------- PARETO ----------------
+
+        losses = (
+            df.groupby("Cause")["Temps_arret"]
+            .sum()
+            .reset_index()
+            .sort_values(
+                "Temps_arret",
+                ascending=False
+            )
+        )
+
+        st.subheader("📊 Pareto des causes d'arrêt")
+
+        fig = px.bar(
+            losses,
+            x="Cause",
+            y="Temps_arret",
+            title="Temps perdu par cause"
+        )
+
+        st.plotly_chart(
+            fig,
+            use_container_width=True
+        )
+
+        # ---------------- TOP CAUSE ----------------
+
+        if len(losses) > 0:
+
+            top_cause = losses.iloc[0]["Cause"]
+            top_time = losses.iloc[0]["Temps_arret"]
+
+            st.error(
+                f"🔴 Cause principale : {top_cause} "
+                f"→ {top_time:.1f} minutes perdues"
+            )
+
+            # ---------------- RECOMMANDATION ----------------
+
+            recommendations = {
+
+                "Attente matière":
+                    "Rapprocher le stock du poste et mettre en place un système de réapprovisionnement.",
+
+                "Panne machine":
+                    "Renforcer la maintenance préventive et analyser les causes de panne.",
+
+                "Réglage":
+                    "Appliquer la démarche SMED pour réduire le temps de changement.",
+
+                "Déplacement":
+                    "Revoir l'implantation du poste et appliquer les principes 5S.",
+
+                "Défaut qualité":
+                    "Analyser les causes avec Ishikawa et mettre en place un contrôle au poste.",
+
+                "Manque opérateur":
+                    "Rééquilibrer les postes et vérifier la charge de travail.",
+
+                "Autre":
+                    "Effectuer une analyse détaillée de la cause."
+            }
+
+            recommendation = recommendations.get(
+                top_cause,
+                "Analyser la cause."
+            )
+
+            st.info(
+                f"💡 **Action recommandée :** {recommendation}"
+            )
+
+        # ---------------- DONNEES ----------------
+
+        st.subheader("📋 Détail des pertes")
+
+        st.dataframe(
+            losses,
+            use_container_width=True
+        )
+
+
+# ============================================================
+# PAGE 4 : SMED
+# ============================================================
+
+elif page == "🔧 SMED":
+
+    st.title("🔧 Analyse SMED")
+
+    st.write(
+        "Comparez le temps de changement de série "
+        "avant et après amélioration."
+    )
+
+    with st.form("smed_form"):
+
+        d = st.date_input(
+            "Date",
+            value=date.today()
+        )
+
+        reference = st.text_input(
+            "Référence"
+        )
+
+        avant = st.number_input(
+            "Temps avant SMED (min)",
+            min_value=0.0,
+            step=1.0
+        )
+
+        apres = st.number_input(
+            "Temps après SMED (min)",
+            min_value=0.0,
+            step=1.0
+        )
+
+        submitted = st.form_submit_button(
+            "Ajouter"
+        )
+
+    if submitted:
+
+        new_smed = pd.DataFrame(
+            [{
+                "Date": d,
+                "Reference": reference,
+                "Temps_avant": avant,
+                "Temps_apres": apres
+            }]
+        )
+
+        st.session_state.smed_data = pd.concat(
+            [
+                st.session_state.smed_data,
+                new_smed
+            ],
+            ignore_index=True
+        )
+
+        st.success("Données SMED ajoutées.")
+
+    smed = st.session_state.smed_data
+
+    if len(smed) > 0:
+
+        smed["Gain_%"] = (
+            (
+                smed["Temps_avant"]
+                - smed["Temps_apres"]
+            )
+            / smed["Temps_avant"]
+            * 100
+        )
+
+        gain_moyen = smed["Gain_%"].mean()
+
+        st.metric(
+            "Gain moyen SMED",
+            f"{gain_moyen:.1f}%"
+        )
+
+        fig = px.bar(
+            smed,
+            x="Reference",
+            y=["Temps_avant", "Temps_apres"],
+            barmode="group",
+            title="Avant / Après SMED"
+        )
+
+        st.plotly_chart(
+            fig,
+            use_container_width=True
+        )
+
+        st.dataframe(
+            smed,
+            use_container_width=True
+        )
+
+
+# ============================================================
+# PAGE 5 : AVANT / APRES
+# ============================================================
+
+elif page == "📈 Avant / Après":
+
+    st.title("📈 Comparaison avant / après amélioration")
+
+    st.subheader("Entrer les performances")
+
+    c1, c2 = st.columns(2)
+
+    with c1:
+
+        st.markdown("### 🔴 Avant amélioration")
+
+        trs_avant = st.number_input(
+            "TRS avant (%)",
+            min_value=0.0,
+            max_value=100.0,
+            value=75.0
+        )
+
+        prod_avant = st.number_input(
+            "Productivité avant (pièces/h)",
+            min_value=0.0,
+            value=80.0
+        )
+
+        cycle_avant = st.number_input(
+            "Cycle Time avant (s)",
+            min_value=0.0,
+            value=52.0
+        )
+
+        arret_avant = st.number_input(
+            "Temps d'arrêt avant (min)",
+            min_value=0.0,
+            value=60.0
+        )
+
+    with c2:
+
+        st.markdown("### 🟢 Après amélioration")
+
+        trs_apres = st.number_input(
+            "TRS après (%)",
+            min_value=0.0,
+            max_value=100.0,
+            value=87.0
+        )
+
+        prod_apres = st.number_input(
+            "Productivité après (pièces/h)",
+            min_value=0.0,
+            value=95.0
+        )
+
+        cycle_apres = st.number_input(
+            "Cycle Time après (s)",
+            min_value=0.0,
+            value=45.0
+        )
+
+        arret_apres = st.number_input(
+            "Temps d'arrêt après (min)",
+            min_value=0.0,
+            value=35.0
+        )
+
+    # ---------------- GAINS ----------------
+
+    st.markdown("---")
+
+    def gain_positif(avant, apres):
+
+        if avant == 0:
+            return 0
+
+        return (apres - avant) / avant * 100
+
+    gain_trs = gain_positif(
+        trs_avant,
+        trs_apres
+    )
+
+    gain_prod = gain_positif(
+        prod_avant,
+        prod_apres
+    )
+
+    gain_cycle = (
+        (cycle_avant - cycle_apres)
+        / cycle_avant
+        * 100
+        if cycle_avant > 0 else 0
+    )
+
+    gain_arret = (
+        (arret_avant - arret_apres)
+        / arret_avant
+        * 100
+        if arret_avant > 0 else 0
+    )
+
+    st.subheader("📊 Résultats")
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    with c1:
+        st.metric(
+            "Gain TRS",
+            f"{gain_trs:.1f}%"
+        )
+
+    with c2:
+        st.metric(
+            "Gain productivité",
+            f"{gain_prod:.1f}%"
+        )
+
+    with c3:
+        st.metric(
+            "Réduction Cycle Time",
+            f"{gain_cycle:.1f}%"
+        )
+
+    with c4:
+        st.metric(
+            "Réduction arrêts",
+            f"{gain_arret:.1f}%"
+        )
+
+    # ---------------- GRAPHIQUE ----------------
+
+    comparison = pd.DataFrame({
+
+        "KPI": [
+            "TRS",
+            "Productivité",
+            "Cycle Time",
+            "Temps d'arrêt"
+        ],
+
+        "Avant": [
+            trs_avant,
+            prod_avant,
+            cycle_avant,
+            arret_avant
+        ],
+
+        "Après": [
+            trs_apres,
+            prod_apres,
+            cycle_apres,
+            arret_apres
+        ]
+    })
+
+    fig = px.bar(
+        comparison,
+        x="KPI",
+        y=["Avant", "Après"],
+        barmode="group",
+        title="Performance avant / après"
+    )
+
+    st.plotly_chart(
+        fig,
+        use_container_width=True
+    )
+
+    st.success(
+        "🎯 L'objectif est de vérifier que les actions "
+        "Lean produisent une amélioration mesurable."
+    )
+
+
+# ============================================================
+# FOOTER
+# ============================================================
+
+st.sidebar.markdown("---")
+st.sidebar.caption(
+    "Lean Production Monitoring System | PFA"
+)
