@@ -4,24 +4,7 @@ import plotly.express as px
 from datetime import date
 from pathlib import Path
 
-# Configuration de la page (doit être la première instruction Streamlit)
-st.set_page_config(
-    page_title="Dashboard Contrôle - Ligne HDEP", page_icon="📊", layout="wide"
-)
 
-# Code CSS pour masquer le menu Streamlit, le "Manage app" et le footer
-hide_streamlit_style = """
-    <style>
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    .stDeployButton {display:none;}
-    div[data-testid="stToolbar"] {visibility: hidden; display: none;}
-    </style>
-"""
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
-
-# Votre code d'application continue ici...
-st.title("📊 Dashboard de Contrôle – Ligne HDEP")
 # ============================================================
 # CONFIGURATION
 # ============================================================
