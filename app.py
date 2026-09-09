@@ -5,83 +5,83 @@ import plotly.express as px
 import streamlit as st
 
 # ============================================================
-# CONFIGURATION & DESIGN ULTRA-MODERNE (CSS INJECTION)
+# CONFIGURATION & DESIGN SAAS / ULTRAS-MODERNE
 # ============================================================
 st.set_page_config(
-    page_title="HDEP - Control DMAIC Dashboard",
-    page_icon="⚡",
-    layout="wide",
+    page_title="HDEP - Control Dashboard", page_icon="⚡", layout="wide"
 )
 
 st.markdown(
     """
     <style>
-        /* Importation d'une police moderne (Inter / Roboto) */
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
 
+        /* Application de la police moderne */
         html, body, [class*="css"] {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Plus Jakarta+Sans', sans-serif;
         }
 
-        /* Fond global de l'application */
-        .main {
-            background-color: #0f172a;
-            color: #f8fafc;
+        /* Fond général et palette style SaaS */
+        .stApp {
+            background-color: #f8fafc;
+            color: #0f172a;
         }
 
-        /* Style de la barre latérale (Sidebar) */
+        /* Sidebar moderne */
         section[data-testid="stSidebar"] {
-            background-color: #1e293b;
-            border-right: 1px solid #334155;
-        }
-        
-        section[data-testid="stSidebar"] .css-17lntkn {
-            color: #f8fafc;
+            background-color: #ffffff;
+            border-right: 1px solid #e2e8f0;
         }
 
-        /* Cartes de métriques personnalisées avec effet néon subtil */
+        /* Cartes de métriques dynamiques avec effet glassmorphism */
         div[data-testid="stMetric"] {
-            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-            border: 1px solid #334155;
-            padding: 18px 20px;
-            border-radius: 14px;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
-            transition: transform 0.2s ease, border-color 0.2s ease;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-left: 4px solid #3b82f6;
+            padding: 16px 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+            transition: all 0.3s ease;
         }
         
         div[data-testid="stMetric"]:hover {
-            border-color: #38bdf8;
-            transform: translateY(-2px);
+            transform: translateY(-3px);
+            box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.15);
+            border-color: #3b82f6;
         }
 
-        /* Style des en-têtes */
+        /* Titres élégants */
         h1, h2, h3 {
-            color: #f8fafc;
+            color: #0f172a;
             font-weight: 700;
         }
 
-        /* Boutons personnalisés */
+        /* Boutons stylisés */
         div.stButton > button {
-            background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
             color: white;
             border: none;
-            border-radius: 8px;
+            border-radius: 10px;
             font-weight: 600;
-            padding: 0.6rem 1.2rem;
-            box-shadow: 0 4px 6px -1px rgba(2, 132, 199, 0.3);
-            transition: all 0.2s ease;
+            padding: 0.6rem 1.5rem;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+            transition: all 0.3s ease;
         }
 
         div.stButton > button:hover {
-            background: linear-gradient(135deg, #0369a1 0%, #075985 100%);
-            box-shadow: 0 6px 8px -1px rgba(2, 132, 199, 0.4);
-            transform: translateY(-1px);
+            background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
+            box-shadow: 0 6px 16px rgba(37, 99, 235, 0.4);
+            transform: translateY(-2px);
         }
 
-        /* Tableaux et dataframes */
-        DataFrame {
-            border-radius: 10px;
-            overflow: hidden;
+        /* Conteneurs personnalisés (Cards) */
+        .custom-card {
+            background: #ffffff;
+            padding: 24px;
+            border-radius: 16px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
+            margin-bottom: 20px;
         }
     </style>
 """,
@@ -113,7 +113,7 @@ CAUSES = [
 ]
 
 # ============================================================
-# DATA
+# DATA FUNCTIONS
 # ============================================================
 
 
@@ -169,15 +169,16 @@ df = load_data()
 actions = load_actions()
 
 # ============================================================
-# SIDEBAR
+# SIDEBAR NAVIGATION
 # ============================================================
 st.sidebar.markdown(
-    "<h2 style='color: #38bdf8; text-align: center;'>⚡ HDEP CONTROL</h2>",
+    "<h3 style='color: #2563eb; text-align: center; margin-bottom: 0;'>⚡ HDEP"
+    " CONTROL</h3>",
     unsafe_allow_html=True,
 )
 st.sidebar.markdown(
-    "<p style='text-align: center; color: #94a3b8; font-size: 0.85rem;'>TE"
-    " Connectivity | Ligne Volvo</p>",
+    "<p style='text-align: center; color: #64748b; font-size: 0.8rem;'>TE"
+    " Connectivity — Ligne Volvo</p>",
     unsafe_allow_html=True,
 )
 st.sidebar.divider()
@@ -197,30 +198,32 @@ page = st.sidebar.radio(
 
 st.sidebar.divider()
 st.sidebar.info(
-    "💡 Pilotage journalier post-implémentation (Temps de cycle, SMED, Scrap,"
-    " Milk-Run)."
+    "💡 Outil interactif de pérennisation des gains (DMAIC - Phase Control)."
 )
 
 # ============================================================
-# 1. DASHBOARD
+# 1. DASHBOARD CONTROL
 # ============================================================
 if page == "📊 Dashboard Control":
-  st.title("📊 Dashboard de Contrôle – Ligne HDEP")
+  st.title("📊 Dashboard de Contrôle en Temps Réel")
   st.markdown(
-      "<p style='color: #94a3b8;'>Pérennisation des améliorations – Phase"
-      " <b>Control</b> du projet DMAIC</p>",
+      "<p style='color: #64748b; margin-top: -10px;'>Suivi opérationnel et"
+      " validation des performances post-optimisation de la ligne HDEP.</p>",
       unsafe_allow_html=True,
   )
   st.write("")
 
   if df.empty:
-    st.warning("⚠️ Aucune donnée quotidienne n'est encore saisie.")
-    st.info("Commencez par renseigner la page « Saisie quotidienne ».")
+    st.warning("⚠️ Aucune donnée quotidienne n'est encore enregistrée.")
+    st.info(
+        "Rendez-vous dans la section **« Saisie quotidienne »** pour alimenter"
+        " le tableau de bord."
+    )
     st.stop()
 
   last = df.sort_values("Date").iloc[-1]
 
-  st.markdown("### 📌 Situation du dernier relevé")
+  st.markdown("### 📌 Indicateurs Clés — Dernier Relevé")
   c1, c2, c3, c4, c5 = st.columns(5)
 
   # 1. Production
@@ -228,7 +231,7 @@ if page == "📊 Dashboard Control":
   c1.metric(
       "Production",
       f'{last["Total production"]:.0f}',
-      f"Objectif: {last['Objectif production']:.0f}",
+      f"Obj: {last['Objectif production']:.0f}",
       delta_color="normal" if prod_ok else "inverse",
   )
 
@@ -264,38 +267,37 @@ if page == "📊 Dashboard Control":
   # 5. Milk-Run
   milk_ok = str(last["Milk-Run 100%"]).strip().lower() in ["oui", "100%"]
   c5.metric(
-      "Milk-Run (0 déplace.)",
+      "Milk-Run",
       str(last["Milk-Run 100%"]),
       "Cible: Oui",
       delta_color="normal" if milk_ok else "inverse",
   )
 
   st.write("")
-  st.divider()
 
-  # Status de validation journalière
+  # Statut de validation sous forme de bannière dynamique
   statut_val = last["Performance validée"]
   if statut_val == "Validée":
     st.success(
-        f"✅ **Statut de la journée ({last['Date'].strftime('%d/%m/%Y')}):"
-        " Performances VALIDÉES**"
+        f"✅ **Statut de la journée ({last['Date'].strftime('%d/%m/%Y')}):**"
+        " Performances validées avec succès. Objectifs atteints !"
     )
   else:
     st.error(
-        f"❌ **Statut de la journée ({last['Date'].strftime('%d/%m/%Y')}):"
-        " Performances NON VALIDÉES (Dérive détectée)**"
+        f"❌ **Statut de la journée ({last['Date'].strftime('%d/%m/%Y')}):**"
+        " Alerte dérive détectée sur la ligne."
     )
     if (
         pd.notna(last["Cause dérive"])
         and last["Cause dérive"] != "Aucune (Conforme)"
     ):
-      st.warning(f"🔍 **Cause principale identifiée :** {last['Cause dérive']}")
+      st.warning(f"🔍 **Cause racine identifiée :** {last['Cause dérive']}")
 
   if pd.notna(last["Commentaire"]) and str(last["Commentaire"]).strip() != "":
-    st.info(f"💬 **Remarque du jour :** {last['Commentaire']}")
+    st.info(f"💬 **Commentaire terrain :** {last['Commentaire']}")
 
   st.divider()
-  st.subheader("📈 Évolution des Temps de Cycle")
+  st.subheader("📈 Dynamique des Temps de Cycle vs Takt Time")
   chart_df = df.sort_values("Date").copy()
 
   fig = px.line(
@@ -303,20 +305,20 @@ if page == "📊 Dashboard Control":
       x="Date",
       y=["CT Assemblage (s)", "CT Push-Back (s)"],
       markers=True,
-      template="plotly_dark",
+      template="plotly_white",
+      color_discrete_sequence=["#2563eb", "#06b6d4"],
   )
   fig.add_hline(
       y=TAKT_TIME,
       line_dash="dash",
       line_color="#ef4444",
-      annotation_text="Takt Time (48s)",
+      annotation_text="Takt Time Cible (48s)",
   )
   fig.update_layout(
       paper_bgcolor="rgba(0,0,0,0)",
       plot_bgcolor="rgba(0,0,0,0)",
       margin=dict(l=20, r=20, t=30, b=20),
-      legend_title="Indicateurs",
-      font=dict(family="Inter", color="#f8fafc"),
+      legend_title="Postes",
   )
   st.plotly_chart(fig, use_container_width=True)
 
@@ -326,8 +328,8 @@ if page == "📊 Dashboard Control":
 elif page == "📝 Saisie quotidienne":
   st.title("📝 Saisie Quotidienne des Indicateurs")
   st.markdown(
-      "<p style='color: #94a3b8;'>Enregistrez les performances journalières"
-      " pour alimenter le tableau de bord.</p>",
+      "<p style='color: #64748b;'>Enregistrez les paramètres de production de"
+      " la journée pour actualiser instantanément les graphiques.</p>",
       unsafe_allow_html=True,
   )
 
@@ -377,7 +379,7 @@ elif page == "📝 Saisie quotidienne":
 
     st.subheader("4. 💬 Validation & Commentaires")
     commentaire = st.text_area(
-        "Remarque ou commentaire du jour sur les améliorations"
+        "Remarque ou observation sur la ligne (optionnel)"
     )
     perf_validee = st.radio(
         "Performances validées pour la journée ?",
@@ -386,7 +388,9 @@ elif page == "📝 Saisie quotidienne":
     )
 
     st.write("")
-    submitted = st.form_submit_button("💾 Enregistrer le relevé journalier")
+    submitted = st.form_submit_button(
+        "💾 Enregistrer et Mettre à Jour le Dashboard"
+    )
 
   if submitted:
     new_row = pd.DataFrame([
@@ -413,14 +417,14 @@ elif page == "📝 Saisie quotidienne":
 # 3. KPI FOLLOW-UP
 # ============================================================
 elif page == "📈 Suivi des KPI":
-  st.title("📈 Analyse et Suivi des KPI")
+  st.title("📈 Analyse et Tendances des KPI")
   if df.empty:
     st.info("Aucune donnée disponible.")
     st.stop()
 
   dff = df.sort_values("Date")
   kpi = st.selectbox(
-      "Sélectionner le KPI à analyser",
+      "Sélectionner l'indicateur à analyser",
       [
           "CT Assemblage (s)",
           "CT Push-Back (s)",
@@ -436,12 +440,11 @@ elif page == "📈 Suivi des KPI":
       y=kpi,
       markers=True,
       title=f"Historique de l'indicateur : {kpi}",
-      template="plotly_dark",
+      template="plotly_white",
+      color_discrete_sequence=["#2563eb"],
   )
   fig.update_layout(
-      paper_bgcolor="rgba(0,0,0,0)",
-      plot_bgcolor="rgba(0,0,0,0)",
-      font=dict(family="Inter", color="#f8fafc"),
+      paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)"
   )
   st.plotly_chart(fig, use_container_width=True)
 
@@ -449,7 +452,7 @@ elif page == "📈 Suivi des KPI":
 # 4. ALERTS & DRIFTS
 # ============================================================
 elif page == "🚨 Alertes & Dérives":
-  st.title("🚨 Suivi des Dérives & Causes")
+  st.title("🚨 Suivi des Dérives & Analyse des Causes")
   if df.empty:
     st.info("Aucune donnée.")
     st.stop()
@@ -475,15 +478,15 @@ elif page == "🚨 Alertes & Dérives":
     )
   else:
     st.success(
-        "🟢 Aucune dérive majeure enregistrée (Toutes les journées sont"
-        " validées)."
+        "🟢 Aucune dérive majeure enregistrée. Processus totalement sous"
+        " contrôle !"
     )
 
 # ============================================================
 # 5. ACTION PLAN
 # ============================================================
 elif page == "🔧 Plan d'actions":
-  st.title("🔧 Plan d'actions correctives")
+  st.title("🔧 Plan d'Actions Correctives (PDCA)")
 
   with st.form("action_form"):
     col1, col2 = st.columns(2)
@@ -529,7 +532,12 @@ elif page == "🔧 Plan d'actions":
 # 6. BEFORE / AFTER
 # ============================================================
 elif page == "🔄 Avant / Après":
-  st.title("🔄 Bilan Avant / Après – Gains du Projet")
+  st.title("🔄 Bilan Avant / Après – Gains du Projet PFA")
+  st.markdown(
+      "<p style='color: #64748b;'>Comparaison directe des performances"
+      " industrielles avant et après le déploiement du DMAIC.</p>",
+      unsafe_allow_html=True,
+  )
 
   comparison = pd.DataFrame({
       "KPI": [
@@ -551,13 +559,12 @@ elif page == "🔄 Avant / Après":
       x="KPI",
       y=["Avant", "Après / Cible"],
       barmode="group",
-      title="Comparaison Avant / Après les Améliorations",
-      template="plotly_dark",
+      title="Comparaison Graphique Avant / Après",
+      template="plotly_white",
+      color_discrete_sequence=["#94a3b8", "#2563eb"],
   )
   fig.update_layout(
-      paper_bgcolor="rgba(0,0,0,0)",
-      plot_bgcolor="rgba(0,0,0,0)",
-      font=dict(family="Inter", color="#f8fafc"),
+      paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)"
   )
   st.plotly_chart(fig, use_container_width=True)
 
@@ -565,9 +572,9 @@ elif page == "🔄 Avant / Après":
 # 7. DATA & EXPORT
 # ============================================================
 elif page == "📥 Données & export":
-  st.title("📥 Base de données & Export")
+  st.title("📥 Base de Données & Exportation")
   if not df.empty:
-    st.subheader("Journal des relevés")
+    st.subheader("Journal complet des relevés")
     st.dataframe(df, use_container_width=True, hide_index=True)
     csv = df.to_csv(index=False).encode("utf-8")
     st.download_button(
