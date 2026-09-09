@@ -18,7 +18,7 @@ ACTIONS_FILE = Path("hdep_actions.csv")
 
 TAKT_TIME = 48.0
 ASSEMBLY_BASELINE = 56.05
-ASSEMBLY_TARGET = 42.0  # ou 50.20 selon cible S3
+ASSEMBLY_TARGET = 48.0  # Modifié à 48s
 PUSHBACK_BASELINE = 52.11
 PUSHBACK_TARGET = 35.81
 SMED_BASELINE = 6.33
@@ -131,33 +131,53 @@ if page == "📊 Dashboard Control":
 
   last = df.sort_values("Date").iloc[-1]
 
-  st.subheader("Situation du dernier relevé")
+  st.subheader("Situation du dernier relevé (Objectifs & Seuils)")
   c1, c2, c3, c4, c5 = st.columns(5)
 
+  # Évaluation des objectifs (Vert si atteint, Rouge sinon)
+  # Production
+  prod_ok = last["Total production"] >= last["Objectif production"]
   c1.metric(
       "Production",
       f'{last["Total production"]:.0f}',
       f"Objectif: {last['Objectif production']:.0f}",
+      delta_color="normal" if prod_ok else "inverse",
   )
+
+  # CT Assemblage (Doit être <= Takt Time 48s)
+  asm_ok = last["CT Assemblage (s)"] <= TAKT_TIME
   c2.metric(
       "CT Assemblage",
       f'{last["CT Assemblage (s)"]:.2f} s',
       f"{last['CT Assemblage (s)'] - TAKT_TIME:+.2f} s vs Takt",
+      delta_color="normal" if asm_ok else "inverse",
   )
+
+  # CT Push-Back (Doit être <= Takt Time 48s)
+  pb_ok = last["CT Push-Back (s)"] <= TAKT_TIME
   c3.metric(
       "CT Push-Back",
       f'{last["CT Push-Back (s)"]:.2f} s',
       f"{last['CT Push-Back (s)'] - TAKT_TIME:+.2f} s vs Takt",
+      delta_color="normal" if pb_ok else "inverse",
   )
+
+  # SMED Komax (Doit être <= SMED_TARGET 3.31 min)
+  smed_ok = last["SMED Komax (min)"] <= SMED_TARGET
   c4.metric(
       "SMED Komax",
       f'{last["SMED Komax (min)"]:.2f} min',
       f"Cible {SMED_TARGET} min",
+      delta_color="normal" if smed_ok else "inverse",
   )
+
+  # Milk-Run (Doit être "Oui" pour 100%)
+  milk_ok = str(last["Milk-Run 100%"]).strip().lower() in ["oui", "100%"]
   c5.metric(
-      "Scrap",
-      f'{last["Scrap (%)"]:.2f} %',
-      f"Milk-Run: {last['Milk-Run 100%']}",
+      "Milk-Run (0 déplace.)",
+      str(last["Milk-Run 100%"]),
+      "Cible: Oui",
+      delta_color="normal" if milk_ok else "inverse",
   )
 
   st.divider()
@@ -390,7 +410,12 @@ elif page == "🔄 Avant / Après":
           "Déplacements opérateurs",
       ],
       "Avant": [ASSEMBLY_BASELINE, PUSHBACK_BASELINE, SMED_BASELINE, 837.51],
-      "Après / Cible": [ASSEMBLY_TARGET, PUSHBACK_TARGET, SMED_TARGET, 0.0],
+      "Après / Cible": [
+          ASSEMBLY_TARGET,
+          PUSHBACK_TARGET,
+          SMED_TARGET,
+          0.0,
+      ],  # Assembly target = 48s
       "Unité": ["s", "s", "min", "s/h"],
   })
 
