@@ -5,87 +5,12 @@ import plotly.express as px
 import streamlit as st
 
 # ============================================================
-# CONFIGURATION & DESIGN SAAS / ULTRAS-MODERNE
+# CONFIGURATION
 # ============================================================
 st.set_page_config(
-    page_title="HDEP - Control Dashboard", page_icon="⚡", layout="wide"
-)
-
-st.markdown(
-    """
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
-
-        /* Application de la police moderne */
-        html, body, [class*="css"] {
-            font-family: 'Plus Jakarta+Sans', sans-serif;
-        }
-
-        /* Fond général et palette style SaaS */
-        .stApp {
-            background-color: #f8fafc;
-            color: #0f172a;
-        }
-
-        /* Sidebar moderne */
-        section[data-testid="stSidebar"] {
-            background-color: #ffffff;
-            border-right: 1px solid #e2e8f0;
-        }
-
-        /* Cartes de métriques dynamiques avec effet glassmorphism */
-        div[data-testid="stMetric"] {
-            background: #ffffff;
-            border: 1px solid #e2e8f0;
-            border-left: 4px solid #3b82f6;
-            padding: 16px 20px;
-            border-radius: 12px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-            transition: all 0.3s ease;
-        }
-        
-        div[data-testid="stMetric"]:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.15);
-            border-color: #3b82f6;
-        }
-
-        /* Titres élégants */
-        h1, h2, h3 {
-            color: #0f172a;
-            font-weight: 700;
-        }
-
-        /* Boutons stylisés */
-        div.stButton > button {
-            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-            color: white;
-            border: none;
-            border-radius: 10px;
-            font-weight: 600;
-            padding: 0.6rem 1.5rem;
-            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
-            transition: all 0.3s ease;
-        }
-
-        div.stButton > button:hover {
-            background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
-            box-shadow: 0 6px 16px rgba(37, 99, 235, 0.4);
-            transform: translateY(-2px);
-        }
-
-        /* Conteneurs personnalisés (Cards) */
-        .custom-card {
-            background: #ffffff;
-            padding: 24px;
-            border-radius: 16px;
-            border: 1px solid #e2e8f0;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
-            margin-bottom: 20px;
-        }
-    </style>
-""",
-    unsafe_allow_html=True,
+    page_title="HDEP - Control DMAIC",
+    page_icon="📊",
+    layout="wide",
 )
 
 DATA_FILE = Path("hdep_control_data.csv")
@@ -93,7 +18,7 @@ ACTIONS_FILE = Path("hdep_actions.csv")
 
 TAKT_TIME = 48.0
 ASSEMBLY_BASELINE = 56.05
-ASSEMBLY_TARGET = 48.0
+ASSEMBLY_TARGET = 48.0  # Cible fixée à 48s
 PUSHBACK_BASELINE = 52.11
 PUSHBACK_TARGET = 35.81
 SMED_BASELINE = 6.33
@@ -113,7 +38,7 @@ CAUSES = [
 ]
 
 # ============================================================
-# DATA FUNCTIONS
+# DATA
 # ============================================================
 
 
@@ -169,20 +94,10 @@ df = load_data()
 actions = load_actions()
 
 # ============================================================
-# SIDEBAR NAVIGATION
+# SIDEBAR
 # ============================================================
-st.sidebar.markdown(
-    "<h3 style='color: #2563eb; text-align: center; margin-bottom: 0;'>⚡ HDEP"
-    " CONTROL</h3>",
-    unsafe_allow_html=True,
-)
-st.sidebar.markdown(
-    "<p style='text-align: center; color: #64748b; font-size: 0.8rem;'>TE"
-    " Connectivity — Ligne Volvo</p>",
-    unsafe_allow_html=True,
-)
-st.sidebar.divider()
-
+st.sidebar.title("HDEP – DMAIC Control")
+st.sidebar.caption("TE Connectivity | Ligne HDEP | Volvo")
 page = st.sidebar.radio(
     "Navigation",
     [
@@ -198,44 +113,37 @@ page = st.sidebar.radio(
 
 st.sidebar.divider()
 st.sidebar.info(
-    "💡 Outil interactif de pérennisation des gains (DMAIC - Phase Control)."
+    "Contrôle journalier des améliorations post-implémentation (Temps de"
+    " cycle, SMED, Scrap, Milk-Run)."
 )
 
 # ============================================================
-# 1. DASHBOARD CONTROL
+# 1. DASHBOARD
 # ============================================================
 if page == "📊 Dashboard Control":
-  st.title("📊 Dashboard de Contrôle en Temps Réel")
-  st.markdown(
-      "<p style='color: #64748b; margin-top: -10px;'>Suivi opérationnel et"
-      " validation des performances post-optimisation de la ligne HDEP.</p>",
-      unsafe_allow_html=True,
-  )
-  st.write("")
+  st.title("📊 Dashboard de Contrôle – Ligne HDEP")
+  st.markdown("### Pérennisation des améliorations – Phase **Control**")
 
   if df.empty:
-    st.warning("⚠️ Aucune donnée quotidienne n'est encore enregistrée.")
-    st.info(
-        "Rendez-vous dans la section **« Saisie quotidienne »** pour alimenter"
-        " le tableau de bord."
-    )
+    st.warning("Aucune donnée quotidienne n'est encore saisie.")
+    st.info("Commencez par la page « Saisie quotidienne ».")
     st.stop()
 
   last = df.sort_values("Date").iloc[-1]
 
-  st.markdown("### 📌 Indicateurs Clés — Dernier Relevé")
+  st.subheader("Situation du dernier relevé (Objectifs & Seuils)")
   c1, c2, c3, c4, c5 = st.columns(5)
 
-  # 1. Production
+  # 1. Production (Plus c'est haut, mieux c'est)
   prod_ok = last["Total production"] >= last["Objectif production"]
   c1.metric(
       "Production",
       f'{last["Total production"]:.0f}',
-      f"Obj: {last['Objectif production']:.0f}",
+      f"Objectif: {last['Objectif production']:.0f}",
       delta_color="normal" if prod_ok else "inverse",
   )
 
-  # 2. CT Assemblage
+  # 2. CT Assemblage (Moins c'est haut, mieux c'est -> Objectif <= 48s)
   asm_diff = last["CT Assemblage (s)"] - TAKT_TIME
   asm_ok = asm_diff <= 0
   c2.metric(
@@ -245,7 +153,7 @@ if page == "📊 Dashboard Control":
       delta_color="inverse" if asm_ok else "normal",
   )
 
-  # 3. CT Push-Back
+  # 3. CT Push-Back (Moins c'est haut, mieux c'est -> Objectif <= 48s)
   pb_diff = last["CT Push-Back (s)"] - TAKT_TIME
   pb_ok = pb_diff <= 0
   c3.metric(
@@ -255,7 +163,7 @@ if page == "📊 Dashboard Control":
       delta_color="inverse" if pb_ok else "normal",
   )
 
-  # 4. SMED Komax
+  # 4. SMED Komax (Doit être <= SMED_TARGET 3.31 min)
   smed_ok = last["SMED Komax (min)"] <= SMED_TARGET
   c4.metric(
       "SMED Komax",
@@ -267,37 +175,37 @@ if page == "📊 Dashboard Control":
   # 5. Milk-Run
   milk_ok = str(last["Milk-Run 100%"]).strip().lower() in ["oui", "100%"]
   c5.metric(
-      "Milk-Run",
+      "Milk-Run (0 déplace.)",
       str(last["Milk-Run 100%"]),
       "Cible: Oui",
       delta_color="normal" if milk_ok else "inverse",
   )
 
-  st.write("")
+  st.divider()
 
-  # Statut de validation sous forme de bannière dynamique
+  # Status de validation journalière
   statut_val = last["Performance validée"]
   if statut_val == "Validée":
     st.success(
-        f"✅ **Statut de la journée ({last['Date'].strftime('%d/%m/%Y')}):**"
-        " Performances validées avec succès. Objectifs atteints !"
+        f"✅ **Statut de la journée ({last['Date'].strftime('%d/%m/%Y')}):"
+        " Performances VALIDÉES**"
     )
   else:
     st.error(
-        f"❌ **Statut de la journée ({last['Date'].strftime('%d/%m/%Y')}):**"
-        " Alerte dérive détectée sur la ligne."
+        f"❌ **Statut de la journée ({last['Date'].strftime('%d/%m/%Y')}):"
+        " Performances NON VALIDÉES (Dérive détectée)**"
     )
     if (
         pd.notna(last["Cause dérive"])
         and last["Cause dérive"] != "Aucune (Conforme)"
     ):
-      st.warning(f"🔍 **Cause racine identifiée :** {last['Cause dérive']}")
+      st.warning(f"🔍 **Cause principale identifiée :** {last['Cause dérive']}")
 
   if pd.notna(last["Commentaire"]) and str(last["Commentaire"]).strip() != "":
-    st.info(f"💬 **Commentaire terrain :** {last['Commentaire']}")
+    st.info(f"💬 **Remarque du jour :** {last['Commentaire']}")
 
   st.divider()
-  st.subheader("📈 Dynamique des Temps de Cycle vs Takt Time")
+  st.subheader("Évolution du Temps de Cycle")
   chart_df = df.sort_values("Date").copy()
 
   fig = px.line(
@@ -305,20 +213,10 @@ if page == "📊 Dashboard Control":
       x="Date",
       y=["CT Assemblage (s)", "CT Push-Back (s)"],
       markers=True,
-      template="plotly_white",
-      color_discrete_sequence=["#2563eb", "#06b6d4"],
+      title="Suivi des Temps de Cycle vs Takt Time (48s)",
   )
   fig.add_hline(
-      y=TAKT_TIME,
-      line_dash="dash",
-      line_color="#ef4444",
-      annotation_text="Takt Time Cible (48s)",
-  )
-  fig.update_layout(
-      paper_bgcolor="rgba(0,0,0,0)",
-      plot_bgcolor="rgba(0,0,0,0)",
-      margin=dict(l=20, r=20, t=30, b=20),
-      legend_title="Postes",
+      y=TAKT_TIME, line_dash="dash", line_color="red", annotation_text="Takt"
   )
   st.plotly_chart(fig, use_container_width=True)
 
@@ -326,17 +224,15 @@ if page == "📊 Dashboard Control":
 # 2. DAILY ENTRY
 # ============================================================
 elif page == "📝 Saisie quotidienne":
-  st.title("📝 Saisie Quotidienne des Indicateurs")
-  st.markdown(
-      "<p style='color: #64748b;'>Enregistrez les paramètres de production de"
-      " la journée pour actualiser instantanément les graphiques.</p>",
-      unsafe_allow_html=True,
+  st.title("📝 Saisie quotidienne")
+  st.caption(
+      "Enregistrez les indicateurs clés et validez la performance du jour."
   )
 
   with st.form("daily_form"):
     d = st.date_input("Date du relevé", value=date.today())
 
-    st.subheader("1. 📊 Production & Qualité")
+    st.subheader("1. Production & Qualité")
     col1, col2, col3 = st.columns(3)
     obj_prod = col1.number_input(
         "Objectif de production", min_value=0.0, value=75.0, step=1.0
@@ -346,7 +242,7 @@ elif page == "📝 Saisie quotidienne":
     )
     scrap = col3.number_input("Scrap (%)", min_value=0.0, value=1.0, step=0.1)
 
-    st.subheader("2. ⏱️ Temps de Cycle & SMED")
+    st.subheader("2. Temps de Cycle & SMED")
     col1, col2, col3 = st.columns(3)
     ct_assembly = col1.number_input(
         "Cycle time poste assemblage (s)",
@@ -367,7 +263,7 @@ elif page == "📝 Saisie quotidienne":
         step=0.01,
     )
 
-    st.subheader("3. 🚚 Logistique & Dérives")
+    st.subheader("3. Logistique & Dérives")
     col1, col2 = st.columns(2)
     milk_run = col1.selectbox(
         "Déplacements opérateurs éliminés à 100% par Milk-Run ?",
@@ -377,9 +273,9 @@ elif page == "📝 Saisie quotidienne":
         "Cause de la dérive (si écart détecté)", CAUSES
     )
 
-    st.subheader("4. 💬 Validation & Commentaires")
+    st.subheader("4. Commentaire & Validation finale")
     commentaire = st.text_area(
-        "Remarque ou observation sur la ligne (optionnel)"
+        "Commentaire ou remarque du jour à propos des améliorations"
     )
     perf_validee = st.radio(
         "Performances validées pour la journée ?",
@@ -387,10 +283,7 @@ elif page == "📝 Saisie quotidienne":
         horizontal=True,
     )
 
-    st.write("")
-    submitted = st.form_submit_button(
-        "💾 Enregistrer et Mettre à Jour le Dashboard"
-    )
+    submitted = st.form_submit_button("💾 Enregistrer le relevé journalier")
 
   if submitted:
     new_row = pd.DataFrame([
@@ -411,20 +304,20 @@ elif page == "📝 Saisie quotidienne":
 
     df = pd.concat([df, new_row], ignore_index=True)
     save_data(df)
-    st.success("✨ Relevé journalier enregistré avec succès !")
+    st.success("Relevé journalier enregistré avec succès !")
 
 # ============================================================
 # 3. KPI FOLLOW-UP
 # ============================================================
 elif page == "📈 Suivi des KPI":
-  st.title("📈 Analyse et Tendances des KPI")
+  st.title("📈 Suivi des KPI")
   if df.empty:
     st.info("Aucune donnée disponible.")
     st.stop()
 
   dff = df.sort_values("Date")
   kpi = st.selectbox(
-      "Sélectionner l'indicateur à analyser",
+      "Choisir le KPI à analyser",
       [
           "CT Assemblage (s)",
           "CT Push-Back (s)",
@@ -434,25 +327,14 @@ elif page == "📈 Suivi des KPI":
       ],
   )
 
-  fig = px.line(
-      dff,
-      x="Date",
-      y=kpi,
-      markers=True,
-      title=f"Historique de l'indicateur : {kpi}",
-      template="plotly_white",
-      color_discrete_sequence=["#2563eb"],
-  )
-  fig.update_layout(
-      paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)"
-  )
+  fig = px.line(dff, x="Date", y=kpi, markers=True, title=f"Évolution de {kpi}")
   st.plotly_chart(fig, use_container_width=True)
 
 # ============================================================
 # 4. ALERTS & DRIFTS
 # ============================================================
 elif page == "🚨 Alertes & Dérives":
-  st.title("🚨 Suivi des Dérives & Analyse des Causes")
+  st.title("🚨 Suivi des Dérives & Causes")
   if df.empty:
     st.info("Aucune donnée.")
     st.stop()
@@ -460,8 +342,7 @@ elif page == "🚨 Alertes & Dérives":
   derives_df = df[df["Performance validée"] == "Non validée"]
   if not derives_df.empty:
     st.warning(
-        f"⚠️ {len(derives_df)} jour(s) enregistré(s) avec des performances non"
-        " validées."
+        f"{len(derives_df)} jour(s) avec des performances non validées."
     )
     st.dataframe(
         derives_df[
@@ -477,34 +358,24 @@ elif page == "🚨 Alertes & Dérives":
         hide_index=True,
     )
   else:
-    st.success(
-        "🟢 Aucune dérive majeure enregistrée. Processus totalement sous"
-        " contrôle !"
-    )
+    st.success("🟢 Aucune dérive majeure enregistrée (Toutes journées validées).")
 
 # ============================================================
 # 5. ACTION PLAN
 # ============================================================
 elif page == "🔧 Plan d'actions":
-  st.title("🔧 Plan d'Actions Correctives (PDCA)")
+  st.title("🔧 Plan d'actions correctives")
 
   with st.form("action_form"):
-    col1, col2 = st.columns(2)
-    d = col1.date_input("Date", value=date.today())
-    problem = col2.text_input("Problème / Dérive constatée")
-
-    col3, col4 = st.columns(2)
-    cause = col3.selectbox("Cause principale", CAUSES)
-    responsible = col4.text_input("Responsable")
-
-    action = st.text_area("Action corrective détaillée")
-
-    col5, col6 = st.columns(2)
-    deadline = col5.date_input("Échéance", value=date.today())
-    status = col6.selectbox("Statut", ["À faire", "En cours", "Réalisée"])
-
+    d = st.date_input("Date", value=date.today())
+    problem = st.text_input("Problème / Dérive constatée")
+    cause = st.selectbox("Cause principale", CAUSES)
+    action = st.text_area("Action corrective")
+    responsible = st.text_input("Responsable")
+    deadline = st.date_input("Échéance", value=date.today())
+    status = st.selectbox("Statut", ["À faire", "En cours", "Réalisée"])
     efficiency = st.selectbox("Efficacité", ["Non évaluée", "Efficace"])
-    submit = st.form_submit_button("➕ Ajouter l'action au plan")
+    submit = st.form_submit_button("Ajouter l'action")
 
   if submit:
     new_action = pd.DataFrame([
@@ -521,23 +392,16 @@ elif page == "🔧 Plan d'actions":
     ])
     actions = pd.concat([actions, new_action], ignore_index=True)
     save_actions(actions)
-    st.success("✨ Action ajoutée avec succès.")
+    st.success("Action ajoutée au plan.")
 
   if not actions.empty:
-    st.divider()
-    st.subheader("📋 Suivi du plan d'actions")
     st.dataframe(actions, use_container_width=True, hide_index=True)
 
 # ============================================================
 # 6. BEFORE / AFTER
 # ============================================================
 elif page == "🔄 Avant / Après":
-  st.title("🔄 Bilan Avant / Après – Gains du Projet PFA")
-  st.markdown(
-      "<p style='color: #64748b;'>Comparaison directe des performances"
-      " industrielles avant et après le déploiement du DMAIC.</p>",
-      unsafe_allow_html=True,
-  )
+  st.title("🔄 Avant / Après – Gains du projet")
 
   comparison = pd.DataFrame({
       "KPI": [
@@ -559,12 +423,7 @@ elif page == "🔄 Avant / Après":
       x="KPI",
       y=["Avant", "Après / Cible"],
       barmode="group",
-      title="Comparaison Graphique Avant / Après",
-      template="plotly_white",
-      color_discrete_sequence=["#94a3b8", "#2563eb"],
-  )
-  fig.update_layout(
-      paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)"
+      title="Comparaison Avant / Après",
   )
   st.plotly_chart(fig, use_container_width=True)
 
@@ -572,13 +431,12 @@ elif page == "🔄 Avant / Après":
 # 7. DATA & EXPORT
 # ============================================================
 elif page == "📥 Données & export":
-  st.title("📥 Base de Données & Exportation")
+  st.title("📥 Données & export")
   if not df.empty:
-    st.subheader("Journal complet des relevés")
     st.dataframe(df, use_container_width=True, hide_index=True)
     csv = df.to_csv(index=False).encode("utf-8")
     st.download_button(
-        "⬇️ Télécharger le rapport complet (CSV)",
+        "⬇️ Télécharger le suivi (CSV)",
         csv,
         "HDEP_Control_Data.csv",
         "text/csv",
